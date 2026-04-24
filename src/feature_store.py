@@ -19,7 +19,17 @@ def store_features_in_hopsworks(feature_df):
         print("Features were saved locally only.")
         return None
 
+    import pandas as pd
     import hopsworks
+
+    feature_df = feature_df.copy()
+
+    # Hopsworks expects a primary key timestamp column.
+    # Our pipeline uses event_time, so we create timestamp from event_time.
+    if "timestamp" not in feature_df.columns:
+        feature_df["timestamp"] = pd.to_datetime(feature_df["event_time"])
+
+    feature_df["timestamp"] = pd.to_datetime(feature_df["timestamp"]).dt.tz_localize(None)
 
     project = hopsworks.login(
         project=HOPSWORKS_PROJECT_NAME,
@@ -33,8 +43,8 @@ def store_features_in_hopsworks(feature_df):
         name=FEATURE_GROUP_NAME,
         version=FEATURE_GROUP_VERSION,
         description="Karachi AQI feature pipeline with weather and pollution features",
-        primary_key=["city", "event_time"],
-        event_time="event_time",
+        primary_key=["city", "timestamp"],
+        event_time="timestamp",
         online_enabled=True,
     )
 
