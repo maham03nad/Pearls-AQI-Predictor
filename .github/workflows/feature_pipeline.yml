@@ -16,7 +16,7 @@ jobs:
       LON: 67.0011
       HOPSWORKS_PROJECT_NAME: ${{ secrets.HOPSWORKS_PROJECT_NAME }}
       HOPSWORKS_API_KEY: ${{ secrets.HOPSWORKS_API_KEY }}
-      HOPSWORKS_HOST: app.hopsworks.ai
+      HOPSWORKS_HOST: ${{ secrets.HOPSWORKS_HOST }}
 
     steps:
       - name: Checkout repository
