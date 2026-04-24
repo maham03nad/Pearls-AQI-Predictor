@@ -2,8 +2,9 @@ pandas
 numpy
 requests
 python-dotenv
-hopsworks
 scikit-learn
 joblib
 flask
 streamlit
+hopsworks[python]==4.7.*
+confluent-kafka
