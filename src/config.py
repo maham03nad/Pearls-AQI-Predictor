@@ -21,7 +21,7 @@ LON = float(os.getenv("LON", "67.0011"))
 
 HOPSWORKS_PROJECT_NAME = os.getenv("HOPSWORKS_PROJECT_NAME", "")
 HOPSWORKS_API_KEY = os.getenv("HOPSWORKS_API_KEY", "")
-HOPSWORKS_HOST = os.getenv("HOPSWORKS_HOST", "app.hopsworks.ai")
+HOPSWORKS_HOST = os.getenv("HOPSWORKS_HOST", "eu-west.cloud.hopsworks.ai")
 
 RAW_DATA_PATH = RAW_DIR / "karachi_raw_weather_pollution.csv"
 FEATURE_DATA_PATH = FEATURE_DIR / "karachi_feature_pipeline.csv"
