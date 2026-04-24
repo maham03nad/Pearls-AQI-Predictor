@@ -1,0 +1,33 @@
+name: Karachi Training Pipeline
+
+on:
+  schedule:
+    - cron: "0 0 * * *"
+  workflow_dispatch:
+
+jobs:
+  training-pipeline:
+    runs-on: ubuntu-latest
+
+    env:
+      CITY: Karachi,PK
+      LAT: 24.8607
+      LON: 67.0011
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run historical backfill
+        run: python pipelines/backfill_pipeline.py --city "Karachi,PK" --start 2025-01-01 --end 2025-04-01
+
+      - name: Run training pipeline
+        run: python pipelines/training_pipeline.py --city "Karachi,PK"
