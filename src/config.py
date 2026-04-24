@@ -27,4 +27,4 @@ RAW_DATA_PATH = RAW_DIR / "karachi_raw_weather_pollution.csv"
 FEATURE_DATA_PATH = FEATURE_DIR / "karachi_feature_pipeline.csv"
 
 FEATURE_GROUP_NAME = "karachi_aqi_features"
-FEATURE_GROUP_VERSION = 1
+FEATURE_GROUP_VERSION = 2
