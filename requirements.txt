@@ -3,3 +3,7 @@ numpy
 requests
 python-dotenv
 hopsworks
+scikit-learn
+joblib
+flask
+streamlit
