@@ -161,18 +161,20 @@ The dashboard was deployed using Streamlit Cloud. GitHub Actions were used to au
 
 ## Dashboard
 
-The Streamlit dashboard displays:
+The dashboard displays:
 
-Current AQI
-AQI category
-Weather conditions
-Pollutant breakdown
-72-hour AQI forecast
-3-day summary
-Forecast alerts
-SHAP explanation
-LIME explanation
-AQI health reference
+- Current AQI
+- AQI category
+- AQI gauge
+- Current weather conditions
+- Pollutant breakdown
+- 72-hour AQI forecast
+- 3-day forecast summary
+- SHAP feature importance
+- AQI scale reference
+- AQI health alerts
+- Aqi class(1-5)
+
 
 ## Limitations
 

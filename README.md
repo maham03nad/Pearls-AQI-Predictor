@@ -363,6 +363,7 @@ The dashboard displays:
 - SHAP feature importance
 - AQI scale reference
 - AQI health alerts
+- Aqi class(1-5)
 
 ---
 
