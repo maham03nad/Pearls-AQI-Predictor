@@ -12,6 +12,13 @@ from fastapi.middleware.cors import CORSMiddleware
 import hopsworks
 import requests
 
+
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except Exception:
+    pass
+
 # ─── CONFIG ─────────────────────────────────────────────
 
 HOPSWORKS_KEY = os.getenv("HOPSWORKS_API_KEY")

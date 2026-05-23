@@ -367,6 +367,23 @@ The dashboard displays:
 
 ---
 
+## FastAPI Backend
+
+The project also include FastAPI backend in `api.py`. 
+It exposes:
+
+- `/current` returns live AQI, pollutant, weather, alert, and timestamp data.
+- `/forecast` returns a 72-hour AQI forecast with hourly predictions and daily summaries.
+- `/health` verifies whether the API and model are running.
+- `/docs` provides Swagger API documentation.
+
+The live dashboard is deployed using Streamlit Cloud, while the FastAPI backend can be run locally using:
+
+```bash
+uvicorn api:app --reload
+```
+--- 
+
 ## Technologies Used
 
 - Python
