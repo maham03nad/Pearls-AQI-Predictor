@@ -200,6 +200,28 @@ def get_aqi_category(aqi: float):
     return "Hazardous", "#7e0023"
 
 
+def get_aqi_class_1_to_5(aqi: float):
+    """
+    Convert AQI value into a simple 1–5 class scale.
+
+    1 = Good
+    2 = Fair
+    3 = Moderate
+    4 = Poor
+    5 = Very Poor
+    """
+    if aqi <= 50:
+        return 1, "Good"
+    elif aqi <= 100:
+        return 2, "Fair"
+    elif aqi <= 150:
+        return 3, "Moderate"
+    elif aqi <= 200:
+        return 4, "Poor"
+    else:
+        return 5, "Very Poor"
+
+
 def get_health_advice(category: str) -> str:
     advice = {
         "Good": "Air quality is satisfactory. Enjoy outdoor activities.",
@@ -432,6 +454,7 @@ def predict_72_hours(current_data: dict) -> list:
 
         pred_aqi = max(0.0, min(500.0, pred_aqi))
         label, color = get_aqi_category(pred_aqi)
+        aqi_class, class_label = get_aqi_class_1_to_5(pred_aqi)
 
         forecasts.append({
             "timestamp": future_time.strftime("%Y-%m-%d %H:%M"),
@@ -439,6 +462,8 @@ def predict_72_hours(current_data: dict) -> list:
             "aqi": round(pred_aqi, 1),
             "category": label,
             "color": color,
+            "aqi_class": aqi_class,
+            "class_label": class_label,
         })
 
     return forecasts
@@ -666,6 +691,7 @@ def main():
     predictions = get_forecast_cached(current)
 
     label, color = get_aqi_category(current["current_aqi"])
+    current_class, current_class_label = get_aqi_class_1_to_5(current["current_aqi"])
     advice = get_health_advice(label)
 
     model = load_model()
@@ -752,12 +778,13 @@ def main():
 
     with col_metrics:
         st.markdown("### Current Conditions")
-        m1, m2, m3, m4 = st.columns(4)
+        m1, m2, m3, m4, m5 = st.columns(5)
 
         m1.metric("🌡️ Temp", f"{current['temp']:.1f}°C")
         m2.metric("💧 Humidity", f"{current['humidity']:.0f}%")
         m3.metric("🌀 Pressure", f"{current['pressure']:.0f} hPa")
         m4.metric("💨 Wind", f"{current['wind_speed']:.1f} m/s")
+        m5.metric("AQI Class", f"{current_class} - {current_class_label}")
 
         st.info(advice)
 
@@ -776,6 +803,9 @@ def main():
     st.divider()
 
     st.plotly_chart(make_forecast_chart(predictions), use_container_width=True)
+    st.caption(
+        "AQI class mapping: 1 = Good, 2 = Fair, 3 = Moderate, 4 = Poor, 5 = Very Poor."
+    )
 
     daily = build_daily_summary(predictions)
 
@@ -849,13 +879,21 @@ def main():
     with st.expander("📖 AQI Scale Reference"):
         scale_data = {
             "AQI Range": ["0–50", "51–100", "101–150", "151–200", "201–300", "301–500"],
-            "Category": [
+            "Health Category": [
                 "Good",
                 "Moderate",
                 "Unhealthy for Sensitive Groups",
                 "Unhealthy",
                 "Very Unhealthy",
                 "Hazardous",
+            ],
+            "1-5 Class": [
+                "1 - Good",
+                "2 - Fair",
+                "3 - Moderate",
+                "4 - Poor",
+                "5 - Very Poor",
+                "5 - Very Poor",
             ],
             "Health Impact": [
                 "Air quality is satisfactory.",
