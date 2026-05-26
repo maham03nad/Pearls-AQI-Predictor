@@ -1,0 +1,6 @@
+last_known_values.json
+check_hopsworks_latest.py
+__pycache__/
+*.pyc
+.env
+.venv/
