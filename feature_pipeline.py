@@ -1,17 +1,19 @@
 """
 STEP 1: Feature Pipeline
-- Fetches raw weather + AQI data from AQICN and OpenWeather APIs
-- Engineers features (time-based + derived)
+- Fetches raw weather + AQI data from AQICN API
+- Uses OpenWeather Air Pollution as fallback for missing pollutant values
+- Engineers time-based, cyclical, rolling, and target features
 - Stores features in Hopsworks Feature Store
 
-Notes:
-- Live future target values are unknown, so target columns are stored as NaN.
-- Missing pollutant values are handled using OpenWeather fallback first, then city-level defaults.
-- Rolling AQI features are calculated from previous Hopsworks records when available.
+Run locally:
+    python feature_pipeline.py
 """
 
+import json
 import os
-from datetime import datetime
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any, Optional
 
 import hopsworks
 import numpy as np
@@ -21,7 +23,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# CONFIG
+#  CONFIG  
 
 AQICN_TOKEN = os.getenv("AQICN_TOKEN")
 OPENWEATHER_KEY = os.getenv("OPENWEATHER_KEY")
@@ -29,11 +31,9 @@ HOPSWORKS_KEY = os.getenv("HOPSWORKS_API_KEY")
 
 CITY = os.getenv("CITY") or "karachi"
 
-
-def get_float_env(name, default):
+def get_float_env(name: str, default: float) -> float:
     value = os.getenv(name)
     return float(value) if value not in (None, "") else default
-
 
 LAT = get_float_env("LAT", 24.8607)
 LON = get_float_env("LON", 67.0011)
@@ -42,37 +42,110 @@ HOPSWORKS_HOST = os.getenv("HOPSWORKS_HOST") or "eu-west.cloud.hopsworks.ai"
 HOPSWORKS_PROJECT = os.getenv("HOPSWORKS_PROJECT") or "aqi_project_10pearls"
 HOPSWORKS_PORT = int(os.getenv("HOPSWORKS_PORT") or 443)
 
-# City-level fallback values are used only if both AQICN and OpenWeather
-# are missing a pollutant value. This avoids treating missing values as clean air.
-CITY_DEFAULTS = {
+LAST_KNOWN_PATH = Path("last_known_values.json")
+
+# City-level defaults are used only when both APIs and last-known cache are missing.
+DEFAULT_VALUES = {
+    "aqi": 125.0,
     "pm25": 35.0,
     "pm10": 80.0,
     "o3": 50.0,
     "no2": 20.0,
     "so2": 5.0,
     "co": 300.0,
-    "aqi": 125.0,
 }
 
-def safe_float(value, fallback=np.nan) -> float:
-    """Safely convert API values to float."""
+# OpenWeather Air Pollution API returns AQI as an ordinal 1–5 category.
+# This mapping is an approximate fallback only, not a replacement for AQICN AQI.
+OPENWEATHER_AQI_MAP = {
+    1: 25.0,
+    2: 75.0,
+    3: 125.0,
+    4: 175.0,
+    5: 300.0,
+}
+#  SAFE VALUE HELPERS  
+
+def safe_float(value: Any, fallback: Optional[float] = None) -> Optional[float]:
+    """Convert API value to float safely."""
     try:
-        if value in (None, "", "-", "NA", "N/A"):
+        if value in (None, "", "-", "NaN"):
             return fallback
-        return float(value)
+        result = float(value)
+        if np.isnan(result):
+            return fallback
+        return result
     except (TypeError, ValueError):
         return fallback
 
 
-def safe_iaqi_value(iaqi_data: dict, key: str) -> float:
-    """Return AQICN pollutant value or NaN if it is missing."""
-    return safe_float(iaqi_data.get(key, {}).get("v", None), fallback=np.nan)
+def load_last_known_values() -> dict:
+    """Load last successful API values from local cache."""
+    if not LAST_KNOWN_PATH.exists():
+        return {}
+
+    try:
+        with open(LAST_KNOWN_PATH, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
 
 
-def fill_missing(value: float, default: float) -> float:
-    """Fill missing numeric value using a city-level default."""
-    return float(default) if pd.isna(value) else float(value)
+def save_last_known_values(values: dict) -> None:
+    """Save latest successful values so future runs can use them if APIs miss fields."""
+    try:
+        with open(LAST_KNOWN_PATH, "w", encoding="utf-8") as f:
+            json.dump(values, f, indent=2)
+    except Exception as e:
+        print(f"[!] Could not save {LAST_KNOWN_PATH}: {e}")
 
+
+def get_aqicn_pollutant(iaqi: dict, key: str) -> Optional[float]:
+    """Read pollutant value from AQICN iaqi block."""
+    return safe_float(iaqi.get(key, {}).get("v"))
+
+
+def get_openweather_pollutant(air_pollution_data: Optional[dict], key: str) -> Optional[float]:
+    """Read pollutant value from OpenWeather Air Pollution API."""
+    if not air_pollution_data:
+        return None
+
+    ow_key_map = {
+        "pm25": "pm2_5",
+        "pm10": "pm10",
+        "o3": "o3",
+        "no2": "no2",
+        "so2": "so2",
+        "co": "co",
+    }
+
+    try:
+        comp = air_pollution_data["list"][0]["components"]
+        return safe_float(comp.get(ow_key_map[key]))
+    except Exception:
+        return None
+
+def resolve_value(name: str, primary: Optional[float], fallback: Optional[float], last_known: dict) -> float:
+    """
+    Choose best available value:
+    1. Primary AQICN value
+    2. OpenWeather fallback value
+    3. Last-known cached value
+    4. City-level default value
+    """
+    if primary is not None:
+        return float(primary)
+
+    if fallback is not None:
+        return float(fallback)
+
+    cached = safe_float(last_known.get(name))
+    if cached is not None:
+        return float(cached)
+
+    return float(DEFAULT_VALUES.get(name, 0.0))
+
+#  API FETCHING  
 
 def fetch_aqi_data(city: str) -> dict:
     """Fetch current AQI data from AQICN."""
@@ -90,21 +163,6 @@ def fetch_aqi_data(city: str) -> dict:
     return data["data"]
 
 
-def fetch_air_pollution_data(lat: float, lon: float) -> dict:
-    """Fetch pollutant fallback values from OpenWeather Air Pollution API."""
-    if not OPENWEATHER_KEY:
-        raise ValueError("Missing OPENWEATHER_KEY")
-
-    url = (
-        f"https://api.openweathermap.org/data/2.5/air_pollution"
-        f"?lat={lat}&lon={lon}&appid={OPENWEATHER_KEY}"
-    )
-
-    resp = requests.get(url, timeout=10)
-    resp.raise_for_status()
-    return resp.json()
-
-
 def fetch_weather_data(lat: float, lon: float) -> dict:
     """Fetch current weather from OpenWeatherMap."""
     if not OPENWEATHER_KEY:
@@ -120,61 +178,94 @@ def fetch_weather_data(lat: float, lon: float) -> dict:
     return resp.json()
 
 
-def engineer_features(aqi_data: dict, weather_data: dict, air_pollution_data: dict | None = None) -> dict:
+def fetch_air_pollution_data(lat: float, lon: float) -> Optional[dict]:
+    """Fetch pollutant fallback data from OpenWeather Air Pollution API."""
+    if not OPENWEATHER_KEY:
+        return None
+
+    url = (
+        f"https://api.openweathermap.org/data/2.5/air_pollution"
+        f"?lat={lat}&lon={lon}&appid={OPENWEATHER_KEY}"
+    )
+
+    try:
+        resp = requests.get(url, timeout=10)
+        resp.raise_for_status()
+        return resp.json()
+    except Exception as e:
+        print(f"[!] OpenWeather Air Pollution fallback failed: {e}")
+        return None
+
+#  FEATURE ENGINEERING 
+
+def engineer_features(
+    aqi_data: dict,
+    weather_data: dict,
+    air_pollution_data: Optional[dict] = None,
+) -> dict:
     """Compute model-ready features from raw API data."""
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    last_known = load_last_known_values()
 
     iaqi = aqi_data.get("iaqi", {})
 
-    # AQICN values are kept as NaN if missing.This avoids treating missing pollutant values as 0.The OpenWeather fallback is applied first, and only if both APIs are missing a value do we fill with city-level defaults. This ensures that we never treat missing pollutant data as 0, which could lead to misleading features.
-    # pollutants to 0 because 0 may incorrectly mean "clean air".
-    aqi = safe_float(aqi_data.get("aqi", None), fallback=np.nan)
-    pm25 = safe_iaqi_value(iaqi, "pm25")
-    pm10 = safe_iaqi_value(iaqi, "pm10")
-    o3 = safe_iaqi_value(iaqi, "o3")
-    no2 = safe_iaqi_value(iaqi, "no2")
-    so2 = safe_iaqi_value(iaqi, "so2")
-    co = safe_iaqi_value(iaqi, "co")
+    # Primary AQI from AQICN
+    aqi_primary = safe_float(aqi_data.get("aqi"))
 
-    # Fallback to OpenWeather Air Pollution API for any missing pollutant.
+    # Fallback AQI from OpenWeather ordinal scale
+    aqi_fallback = None
     if air_pollution_data:
         try:
-            ap_item = air_pollution_data["list"][0]
-            comp = ap_item.get("components", {})
+            ow_aqi_class = int(air_pollution_data["list"][0]["main"]["aqi"])
+            aqi_fallback = OPENWEATHER_AQI_MAP.get(ow_aqi_class)
+        except Exception:
+            aqi_fallback = None
 
-            if pd.isna(aqi):
-                aqi_map = {1: 25, 2: 75, 3: 125, 4: 175, 5: 300}
-                aqi = float(aqi_map.get(ap_item.get("main", {}).get("aqi"), np.nan))
+    aqi = resolve_value("aqi", aqi_primary, aqi_fallback, last_known)
 
-            if pd.isna(pm25):
-                pm25 = safe_float(comp.get("pm2_5"), fallback=np.nan)
-            if pd.isna(pm10):
-                pm10 = safe_float(comp.get("pm10"), fallback=np.nan)
-            if pd.isna(o3):
-                o3 = safe_float(comp.get("o3"), fallback=np.nan)
-            if pd.isna(no2):
-                no2 = safe_float(comp.get("no2"), fallback=np.nan)
-            if pd.isna(so2):
-                so2 = safe_float(comp.get("so2"), fallback=np.nan)
-            if pd.isna(co):
-                co = safe_float(comp.get("co"), fallback=np.nan)
-        except Exception as e:
-            print(f"[!] OpenWeather pollutant fallback could not be applied: {e}")
+    # Pollutants: AQICN → OpenWeather → last-known → default
+    pm25 = resolve_value(
+        "pm25",
+        get_aqicn_pollutant(iaqi, "pm25"),
+        get_openweather_pollutant(air_pollution_data, "pm25"),
+        last_known,
+    )
+    pm10 = resolve_value(
+        "pm10",
+        get_aqicn_pollutant(iaqi, "pm10"),
+        get_openweather_pollutant(air_pollution_data, "pm10"),
+        last_known,
+    )
+    o3 = resolve_value(
+        "o3",
+        get_aqicn_pollutant(iaqi, "o3"),
+        get_openweather_pollutant(air_pollution_data, "o3"),
+        last_known,
+    )
+    no2 = resolve_value(
+        "no2",
+        get_aqicn_pollutant(iaqi, "no2"),
+        get_openweather_pollutant(air_pollution_data, "no2"),
+        last_known,
+    )
+    so2 = resolve_value(
+        "so2",
+        get_aqicn_pollutant(iaqi, "so2"),
+        get_openweather_pollutant(air_pollution_data, "so2"),
+        last_known,
+    )
+    co = resolve_value(
+        "co",
+        get_aqicn_pollutant(iaqi, "co"),
+        get_openweather_pollutant(air_pollution_data, "co"),
+        last_known,
+    )
 
-    # Final fallback to city-level defaults only if both APIs are missing values.
-    aqi = fill_missing(aqi, CITY_DEFAULTS["aqi"])
-    pm25 = fill_missing(pm25, CITY_DEFAULTS["pm25"])
-    pm10 = fill_missing(pm10, CITY_DEFAULTS["pm10"])
-    o3 = fill_missing(o3, CITY_DEFAULTS["o3"])
-    no2 = fill_missing(no2, CITY_DEFAULTS["no2"])
-    so2 = fill_missing(so2, CITY_DEFAULTS["so2"])
-    co = fill_missing(co, CITY_DEFAULTS["co"])
-
-    temp = safe_float(weather_data["main"]["temp"])
-    humidity = safe_float(weather_data["main"]["humidity"])
-    pressure = safe_float(weather_data["main"]["pressure"])
-    wind_speed = safe_float(weather_data["wind"]["speed"])
-    wind_deg = safe_float(weather_data["wind"].get("deg", 0), fallback=0.0)
+    temp = safe_float(weather_data.get("main", {}).get("temp"), 0.0)
+    humidity = safe_float(weather_data.get("main", {}).get("humidity"), 0.0)
+    pressure = safe_float(weather_data.get("main", {}).get("pressure"), 0.0)
+    wind_speed = safe_float(weather_data.get("wind", {}).get("speed"), 0.0)
+    wind_deg = safe_float(weather_data.get("wind", {}).get("deg"), 0.0)
 
     hour = now.hour
     day = now.weekday()
@@ -185,6 +276,23 @@ def engineer_features(aqi_data: dict, weather_data: dict, air_pollution_data: di
     hour_cos = np.cos(2 * np.pi * hour / 24)
     month_sin = np.sin(2 * np.pi * month / 12)
     month_cos = np.cos(2 * np.pi * month / 12)
+
+    latest_values = {
+        "aqi": float(aqi),
+        "pm25": float(pm25),
+        "pm10": float(pm10),
+        "o3": float(o3),
+        "no2": float(no2),
+        "so2": float(so2),
+        "co": float(co),
+        "temp": float(temp),
+        "humidity": float(humidity),
+        "pressure": float(pressure),
+        "wind_speed": float(wind_speed),
+        "wind_deg": float(wind_deg),
+        "updated_at": now.isoformat(),
+    }
+    save_last_known_values(latest_values)
 
     return {
         "timestamp": now.strftime("%Y-%m-%d %H:%M:%S"),
@@ -209,62 +317,78 @@ def engineer_features(aqi_data: dict, weather_data: dict, air_pollution_data: di
         "hour_cos": float(hour_cos),
         "month_sin": float(month_sin),
         "month_cos": float(month_cos),
-        #  Before insert these values are updated from Hopsworks history.
-        # If history is unavailable, the current AQI remains a safe fallback.
+
+        # These are updated using recent Feature Store history before insert.
+        # Safe fallback values are used if history is unavailable.
         "aqi_change_rate": 0.0,
         "aqi_rolling_6h": float(aqi),
         "aqi_rolling_24h": float(aqi),
-        # Live single-row future targets are unknown.
-        # To avoids target leakage Keeping them as NaN .
-        "target_aqi_3h": float("nan"),
-        "target_aqi_24h": float("nan"),
-        "target_aqi_72h": float("nan"),
+
+        # Future AQI values are unknown for a live row.
+        # Keep targets null to avoid target leakage.
+        "target_aqi_3h": None,
+        "target_aqi_24h": None,
+        "target_aqi_72h": None,
     }
 
-def update_live_trend_features(features: dict, feature_group):
-    """
-    Update live rolling features from previous Hopsworks records when available.
+#  LIVE TREND FEATURES 
 
-    Fallback:
-    If reading previous records fails, keep current AQI as rolling values.
-    This keeps the feature pipeline robust in scheduled runs.
+def update_live_trend_features(features: dict, fg) -> dict:
+    """
+    Update aqi_change_rate, aqi_rolling_6h, and aqi_rolling_24h using recent history.
+
+    If Hopsworks history cannot be read, the function keeps safe fallback values
+    based on the current AQI so the feature pipeline still inserts the live row.
     """
     try:
-        history = feature_group.read()
+        history = fg.read()
 
         if history is None or history.empty:
             return features
 
         history = history.copy()
-        history["timestamp"] = pd.to_datetime(history["timestamp"], utc=True, errors="coerce")
-        current_ts = pd.to_datetime(features["timestamp"], utc=True)
+        history["timestamp"] = pd.to_datetime(history["timestamp"], errors="coerce", utc=True)
+        history = history.dropna(subset=["timestamp"])
 
+        current_ts = pd.to_datetime(features["timestamp"], utc=True)
         history = history[
             (history["city"].astype(str).str.lower() == str(features["city"]).lower())
             & (history["timestamp"] < current_ts)
         ].sort_values("timestamp")
 
-        if history.empty or "aqi" not in history.columns:
+        if history.empty:
             return features
 
-        recent_aqi = pd.to_numeric(history["aqi"], errors="coerce").dropna()
+        recent_24 = history.tail(24)
+        recent_6 = history.tail(6)
 
-        if recent_aqi.empty:
-            return features
+        previous_aqi = safe_float(history.iloc[-1].get("aqi"), features["aqi"])
+        features["aqi_change_rate"] = float(features["aqi"] - previous_aqi)
 
-        last_aqi = float(recent_aqi.iloc[-1])
-        features["aqi_change_rate"] = float(features["aqi"] - last_aqi)
-        features["aqi_rolling_6h"] = float(recent_aqi.tail(6).mean())
-        features["aqi_rolling_24h"] = float(recent_aqi.tail(24).mean())
+        # Include the current AQI in live rolling values.
+        features["aqi_rolling_6h"] = float(
+            pd.concat([recent_6["aqi"], pd.Series([features["aqi"]])]).astype(float).mean()
+        )
+        features["aqi_rolling_24h"] = float(
+            pd.concat([recent_24["aqi"], pd.Series([features["aqi"]])]).astype(float).mean()
+        )
+
+        print(
+            "[✓] Updated live rolling features "
+            f"(6h={features['aqi_rolling_6h']:.2f}, "
+            f"24h={features['aqi_rolling_24h']:.2f}, "
+            f"change={features['aqi_change_rate']:.2f})"
+        )
 
     except Exception as e:
-        print(f"[!] Could not compute live rolling features from Hopsworks history: {e}")
-        print("[!] Keeping current AQI as rolling feature fallback.")
+        print(f"[!] Could not calculate rolling features from Hopsworks history: {e}")
+        print("[i] Using safe fallback rolling features based on current AQI.")
 
     return features
 
+# HOPSWORKS STORAGE 
 
-def store_in_hopsworks(features: dict):
+def store_in_hopsworks(features: dict) -> None:
     """Push one row of features to the Hopsworks Feature Store."""
     if not HOPSWORKS_KEY:
         raise ValueError("Missing HOPSWORKS_API_KEY")
@@ -282,31 +406,29 @@ def store_in_hopsworks(features: dict):
         name="aqi_features",
         version=1,
         primary_key=["city", "timestamp"],
-        description="Hourly AQI + weather features",
+        description="Hourly AQI + weather features (with targets)",
         event_time="timestamp",
     )
 
     features = update_live_trend_features(features, fg)
 
     df = pd.DataFrame([features])
-    df["timestamp"] = pd.to_datetime(df["timestamp"])
+    df["timestamp"] = pd.to_datetime(df["timestamp"], utc=True)
 
-    fg.insert(df, write_options={"wait_for_job": False})
-    print(f"[✓] Inserted 1 row at {features['timestamp']}")
+    # Wait for the Hopsworks insert job so the new row is committed and visible.
+    fg.insert(df, write_options={"wait_for_job": True})
 
+    print(f"[✓] Inserted 1 row at {features['timestamp']} UTC")
 
-def run():
+#PIPELINE ENTRYPOINT 
+
+def run() -> None:
     print("=== Feature Pipeline ===")
     print(f"Fetching data for {CITY}...")
 
     aqi_data = fetch_aqi_data(CITY)
     weather_data = fetch_weather_data(LAT, LON)
-
-    try:
-        air_pollution_data = fetch_air_pollution_data(LAT, LON)
-    except Exception as e:
-        print(f"[!] OpenWeather Air Pollution fallback unavailable: {e}")
-        air_pollution_data = None
+    air_pollution_data = fetch_air_pollution_data(LAT, LON)
 
     features = engineer_features(aqi_data, weather_data, air_pollution_data)
 
