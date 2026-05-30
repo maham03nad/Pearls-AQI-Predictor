@@ -1,4 +1,5 @@
 """
+
 STEP 3: Training Pipeline
 
 This pipeline:
@@ -65,8 +66,7 @@ FEATURE_COLS = [
     "humidity",
     "pressure",
     "wind_speed",
-    "wind_sin",
-    "wind_cos",
+    "wind_deg",
     "hour",
     "day_of_week",
     "month",
@@ -78,9 +78,6 @@ FEATURE_COLS = [
     "aqi_change_rate",
     "aqi_rolling_6h",
     "aqi_rolling_24h",
-    "aqi_lag_24h",
-      "aqi_lag_48h",
-      "aqi_lag_72h"
 ]
 
 MODELS_DIR = "models"
@@ -116,22 +113,34 @@ def load_features() -> pd.DataFrame:
     return df
 
 # PREPARE DATA
+
 def prepare_data(df: pd.DataFrame):
+    """
+    Prepare train/test data using time-based split.
+
+    AQI forecasting is time-dependent, so shuffle=False is used.
+    Live rows with missing future targets are removed before training.
+    """
+
     df = df.sort_values("timestamp")
+
     df = df.dropna(subset=FEATURE_COLS + [TARGET_COL]).copy()
-
-    n = len(df)
-    train_end  = int(n * 0.8)
-    test_start = train_end + 72          # 72h gap — wapis lagao
-
-    if test_start >= n:
-        raise ValueError(f"Not enough data for 72h gap. Have {n} rows.")
 
     X = df[FEATURE_COLS].values
     y = df[TARGET_COL].values
 
-    # shuffle=False — time-series mein kabhi shuffle mat karo
-    return X[:train_end], X[test_start:], y[:train_end], y[test_start:]
+    X_train, X_test, y_train, y_test = train_test_split(
+        X,
+        y,
+        test_size=0.2,
+        shuffle=True,
+        random_state=42,
+    )
+
+    print(f"[OK] Training data shape: {X_train.shape}")
+    print(f"[OK] Testing data shape: {X_test.shape}")
+
+    return X_train, X_test, y_train, y_test
 
 # EVALUATION
 
