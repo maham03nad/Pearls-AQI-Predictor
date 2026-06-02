@@ -37089,25 +37089,25 @@
 /***/ })
 /******/ ]);
 //# sourceMappingURL=bundle.js.map </script></head><body>
-        <div class="lime top_div" id="top_div325EO8BUWPN4FMG"></div>
+        <div class="lime top_div" id="top_divYUXVYEMRMKCYH9T"></div>
         
         <script>
-        var top_div = d3.select('#top_div325EO8BUWPN4FMG').classed('lime top_div', true);
+        var top_div = d3.select('#top_divYUXVYEMRMKCYH9T').classed('lime top_div', true);
         
         
                     var pp_div = top_div.append('div')
                                         .classed('lime predicted_value', true);
                     var pp_svg = pp_div.append('svg').style('width', '100%');
-                    var pp = new lime.PredictedValue(pp_svg, 194.3180985881626, 13.424697818761569, 281.88740794234144);
+                    var pp = new lime.PredictedValue(pp_svg, 137.75883736231393, 35.56973180457729, 278.13507501511907);
                     
         var exp_div;
             var exp = new lime.Explanation(["negative", "positive"]);
         
             exp_div = top_div.append('div').classed('lime explanation', true);
-            exp.show([["co > 159.82", 27.545373935719162], ["pressure > 1013.60", 14.84961268859693], ["pm25 > 40.20", 13.139385059451646], ["-0.87 < month_sin <= -0.00", 7.381131453008105], ["so2 > 1.42", -7.006898910838232], ["month > 10.00", 6.634903337103861], ["wind_deg <= 197.00", -6.5072624151378005], ["o3 > 113.80", 5.269160605310226], ["125.00 < aqi_rolling_24h <= 168.75", 4.222150053258154], ["no2 > 0.28", -3.1615678545385686]], 1, exp_div);
+            exp.show([["pm25 > 38.65", 14.744939348099617], ["pressure <= 1001.80", -7.819826243618794], ["0.00 < month_sin <= 0.50", 7.7278869534955446], ["66.56 < o3 <= 111.13", 6.722054253491933], ["wind_deg > 269.00", 5.702312428181668], ["107.40 < co <= 150.66", -4.359002864276334], ["125.00 < aqi_rolling_24h <= 168.75", 4.03554881791716], ["so2 > 1.07", -3.9302272908064837], ["75.43 < pm10 <= 110.65", -3.6692952016942133], ["3.00 < day_of_week <= 5.00", 2.830242477649921]], 1, exp_div);
             
         var raw_div = top_div.append('div');
-            exp.show_raw_tabular([["co", "299.42", 27.545373935719162], ["pressure", "1017.10", 14.84961268859693], ["pm25", "69.67", 13.139385059451646], ["month_sin", "-0.50", 7.381131453008105], ["so2", "10.47", -7.006898910838232], ["month", "11.00", 6.634903337103861], ["wind_deg", "27.00", -6.5072624151378005], ["o3", "145.57", 5.269160605310226], ["aqi_rolling_24h", "168.75", 4.222150053258154], ["no2", "1.67", -3.1615678545385686]], 1, raw_div);
+            exp.show_raw_tabular([["pm25", "40.52", 14.744939348099617], ["pressure", "999.90", -7.819826243618794], ["month_sin", "0.50", 7.7278869534955446], ["o3", "101.51", 6.722054253491933], ["wind_deg", "282.00", 5.702312428181668], ["co", "118.25", -4.359002864276334], ["aqi_rolling_24h", "145.83", 4.03554881791716], ["so2", "1.34", -3.9302272908064837], ["pm10", "105.13", -3.6692952016942133], ["day_of_week", "5.00", 2.830242477649921]], 1, raw_div);
         
         </script>
         </body></html>
