@@ -196,7 +196,7 @@ The dashboard displays:
 | 0–50          | Good                 |✅ Safe      | 
 | 51–100        | Moderate             |🟡 Acceptable|
 |101–150        |Unhealthy (Sensitive) |🟠 Caution   | 
-|151–200        |Unhealthy | 44.84     |🔴 Warning   | 
+|151–200        |Unhealthy             |🔴 Warning   | 
 |201–300        |Very Unhealthy        |🟣 Danger    |
 |301+           |Hazardous             |⛔ Emergency |
 ## FastAPI Backend
