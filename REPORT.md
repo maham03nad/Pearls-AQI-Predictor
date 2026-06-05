@@ -189,6 +189,16 @@ The dashboard displays:
 - AQI health alerts
 - Aqi class(1-5)
 
+## AQI Health Alert System
+
+| AQI Range     |  Category            | Alert       | 
+| ------------- | -------------------- |------------ |
+| 0–50          | Good                 |✅ Safe      | 
+| 51–100        | Moderate             |🟡 Acceptable|
+|101–150        |Unhealthy (Sensitive) |🟠 Caution   | 
+|151–200        |Unhealthy | 44.84     |🔴 Warning   | 
+|201–300        |Very Unhealthy        |🟣 Danger    |
+|301+           |Hazardous             |⛔ Emergency |
 ## FastAPI Backend
 
 The project also include FastAPI backend in `api.py`. 
