@@ -18,6 +18,7 @@ GitHub Repository: [Open GitHub Repository](https://github.com/maham03nad/pearls
 ## City
 
 Karachi, Pakistan
+
 Latitude: `24.8607`  
 Longitude: `67.0011`
 
@@ -25,7 +26,7 @@ Longitude: `67.0011`
 
 ## Project Objective
 
-The main objective of this project is to predict the AQI for the next 72 hours using a serverless machine learning pipeline.
+The objective of this project is to predict the AQI for the next 72 hours using a serverless machine learning pipeline.
 
 The system includes:
 
@@ -97,6 +98,7 @@ AQI Forecast + SHAP + Alerts
 ## Feature Pipeline
 
 The feature pipeline fetches live AQI, pollutant, and weather data for Karachi.
+Feature pipeline runs **every hour** via git hub actions 
 
 It collects:
 
@@ -140,15 +142,13 @@ The feature group contains 28 engineered features.
 
 A historical backfill pipeline was created to generate training data from past AQI and weather records.
 
-The backfill pipeline:
+**Backfill pipeline:**
 
 - Fetches historical AQI and pollutant data
 - Fetches historical weather data
 - Computes engineered features
 - Creates future AQI targets
 - Stores the processed data in Hopsworks Feature Store
-
-This created enough historical data for model training.
 
 ---
 
@@ -264,15 +264,6 @@ AQI prediction is a regression problem, so the models were evaluated using:
 
 Accuracy was not used because AQI prediction is a regression problem, not a classification problem.
 
-### Model Comparison Note
-
-Random Forest performed best on the random train-test split in the notebook.
-
-But in the training pipeline Gradient Boosting is selected as a final registered model based on the pipeline evaluation metrics in Hopsworks Model Registry.
-
-Therefore, Gradient Boosting was used as the final production model, while Random Forest was kept as part of the model comparison experiment.
-
----
 
 ## Final Registered Model
 
@@ -280,17 +271,17 @@ The final model was stored in Hopsworks Model Registry.
 
 ```text
 Model Name: aqi_predictor
-Latest Version: 2
-Best Model: GradientBoost
+Latest Version: 3
+Best Model: RandomForest
 Framework: Python
 ```
 
 Model metrics:
 
 ```text
-MAE: 11.76
-RMSE: 19.97
-R²: 0.738
+MAE: 11.56
+RMSE: 20.12
+R²: 0.897
 ```
 ---
 
@@ -304,48 +295,39 @@ Important features included:
 
 - PM10
 - PM2.5
-- AQI rolling average
+- AQI rolling average(6h,24h)S
 - CO
 - O3
 - NO2
 ---
 
-## AQI Alerts
+## 🚨 AQI Health Alerts
 
-The dashboard includes AQI health alerts.
+| AQI Range | Category | Alert |
+|-----------|----------|-------|
+| 0–50 | Good | ✅ Safe |
+| 51–100 | Moderate | 🟡 Acceptable |
+| 101–150 | Unhealthy (Sensitive) | 🟠 Caution |
+| 151–200 | Unhealthy | 🔴 Warning |
+| 201–300 | Very Unhealthy | 🟣 Danger |
+| 301+ | Hazardous | ⛔ Emergency |
 
-Alert categories:
-
-- Good
-- Moderate
-- Unhealthy for Sensitive Groups
-- Unhealthy
-- Very Unhealthy
-- Hazardous
 
 When AQI reaches unhealthy or hazardous levels, the dashboard displays a warning message.
 
+### LIME (Local Importance)
+Explains individual predictions — why the model predicted a specific AQI value for a specific time.
+
 ---
 
-## Automation with GitHub Actions
 
-GitHub Actions was used to automate the project pipelines.
+## 🤖 GitHub Actions Automation
 
-Workflows:
-
-```text
-Feature Pipeline: Runs every hour
-Training Pipeline: Runs daily
-Backfill Pipeline: Runs manually when needed
-```
-Workflow files:
-
-```text
-.github/workflows/feature.yml
-.github/workflows/training.yml
-.github/workflows/backfill.yml
-```
-The GitHub Actions runs show green checks for both hourly feature pipeline and daily training pipeline.
+| Workflow | Schedule | File |
+|----------|----------|------|
+| Feature Pipeline | Every hour | `.github/workflows/feature.yml` |
+| Training Pipeline | Daily | `.github/workflows/training.yml` |
+| Backfill Pipeline | Manual | `.github/workflows/backfill.yml` |
 
 ---
 
@@ -384,20 +366,9 @@ uvicorn api:app --reload
 ```
 --- 
 
-## Technologies Used
+## 🛠️ Technologies Used
 
-- Python
-- Pandas
-- NumPy
-- Scikit-learn
-- Hopsworks Feature Store
-- Hopsworks Model Registry
-- GitHub Actions
-- Streamlit
-- Plotly
-- SHAP
-- AQICN API
-- OpenWeather API
+`Python` · `Pandas` · `NumPy` · `Scikit-learn` · `TensorFlow/Keras` · `Hopsworks` · `GitHub Actions` · `Streamlit` · `Plotly` · `SHAP` · `LIME` · `AQICN API` · `OpenWeather API`
 
 ---
 

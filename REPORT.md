@@ -1,6 +1,17 @@
 #  Project Report---AQI Predictor
+72-Hour Air Quality Forecasting System — Karachi, Pakistan
 
-This project predicts Air Quality Index (AQI) for Karachi using pollutant, weather, time-based, and rolling AQI features.
+SUBMITTED BY: MAHAM NADEEM
+
+**SUMMARY**
+
+Pearls AQI Predictor is a fully automated, serverless ML system that forecasts the Air Quality Index (AQI) for Karachi, Pakistan 72 hours into the future. The system collects real-time pollutant and weather data, engineers meaningful features, trains multiple regression models, and serves live predictions through a Streamlit dashboard — all orchestrated via GitHub Actions CI/CD.
+
+| Best Model      | RandomForest|Auto-selected by lowest RMSE|
+| R² Score        |0.894        |89.4% variance explained    |
+| RMSE            | 20.32 AQI   |Average prediction error    |
+| MAE             | 11.53 AQI   |Mean absolute deviation     |
+|Forecast Horizon | 72 hours    |3-day ahead prediction      |
 
 ## System Architecture
 
@@ -25,7 +36,7 @@ Streamlit Dashboard
 
 ## Data Sources
 
-2 data sources are used:
+In this 2 data sources are used:
 - AQICN: AQI and pollutant data
 - OpenWeather: weather data
 
@@ -33,13 +44,16 @@ AQICN API:
 
 AQICN provided AQI and pollutant values:
 
-AQI
-PM2.5
-PM10
-O3
-NO2
-SO2
-CO
+
+| Pollutant       | Description                                    |
+| --------------- | ---------------                                |
+| AQI             | Overall Air Quality Index                      |
+| PM2.5           | Fine particulate matter (≤2.5μm) — most harmful|       
+|PM10             |Coarse particulate matter (≤10μm)               |
+|O3               |Ground-level ozone                              |
+|NO2              |Nitrogen dioxide — traffic/industrial           |
+|SO2              | Sulphur dioxide — combustion                   |       
+|CO               |Carbon monoxide                                 |
 
 OpenWeather API:
 
@@ -73,6 +87,19 @@ Target columns: target_aqi_3h, target_aqi_24h, target_aqi_72h
 
 Live feature rows store future target columns as NaN because future AQI is unknown at insertion time. Historical target values are created from past data using time-based shifting
 
+## Cyclical Encoding
+
+Time features (hour, month) are encoded using sine and cosine transformations to capture their cyclical nature. Without this, a model would treat hour 23 and hour 0 as far apart when they are actually adjacent.
+Formula: sin(2π × hour / 24) and cos(2π × hour / 24)
+
+## Rolling Features
+
+AQI rolling averages over 6-hour and 24-hour windows capture the recent trend and momentum of air quality. The AQI change rate captures the current direction of change (improving or deteriorating).
+
+ ## Target Engineering
+
+Future targets are created by shifting the AQI column forward. Live rows have None/NaN for target columns, as future AQI is unknown at collection time — this prevents data leakage.
+
 ## Hopsworks Feature Store
 
 The engineered data was stored in Hopsworks Feature Store.
@@ -101,7 +128,7 @@ Pollutants such as PM2.5, PM10, O3, NO2, SO2, and CO were useful AQI-related fea
 
 Weather features were included because temperature, humidity, pressure, and wind affect pollution concentration and movement.
 
-## Model Training
+## Model Training & Evaluation
 
 Multiple regression models were trained and compared:
 
@@ -114,38 +141,25 @@ Multiple regression models were trained and compared:
 Since AQI prediction is a regression taskn so the models were evaluated using MAE, RMSE, and R² score.
 The final production model was selected based on evaluation metrics and registered in Hopsworks Model Registry.
 
-## Results
+## Model Comparison Results
 
-The final registered model achieved:
+| MODEL         |  RMSE    | MAE  | R²    |
+| ------------- | ---------|------|-------|
+| RandomForest  |    20.32 | 11.53| 0.894 |
+| GradientBoost |    40.59 | 29.59| 0.578 |
+|Ridge          |    54.25 | 40.88| 0.246 |   
+|LSTM           |    62.28 | 44.84| -0.01 |
 
-- MAE: 11.76
-- RMSE: 19.97
-- R²: 0.738
+RandomForest achieved the best performance with R² = 0.894, meaning it explains 89.4% of the variance in 72-hour AQI values. It is automatically registered as the production model in Hopsworks Model Registry.
 
-R² = 0.738 means the model explains a good portion of AQI variation and performs reasonably well for AQI forecasting.
+## Model Selection Logic:
 
-## Model Comparison:
+The training pipeline auto-selects the best model by lowest RMSE across all trained sklearn models. This prevents hardcoded model selection and ensures the pipeline adapts as data evolves.
 
-In the notebook model comparison, Random Forest performed best on the random train-test split.
+## LSTM Experimental Model:
 
-But the production training pipeline uses  Gradient Boosting as the final registered model based on the pipeline evaluation metrics in Hopsworks Model Registry.
+An LSTM (Long Short-Term Memory) neural network was trained as an experimental comparison model. It uses 24-step look-back sequences and EarlyStopping to prevent overfitting. The LSTM is not used for production predictions as it requires sequential input that is unavailable at live inference time.
 
-This difference happen because notebook experiments and production pipeline evaluation uses different split methods or evaluation settings.
-
-## Final Model Results
-
-The final model was registered in Hopsworks Model Registry as:
-
-Model Name: aqi_predictor
-Final Model: GradientBoost
-
-MAE: 11.76
-
-RMSE: 19.97
-
-R²: 0.738
-
-An R² score of 0.738 means that the model explains approximately 73.8% of the variation in AQI values. This indicates that the model has learned meaningful relationships between pollutant, weather, time-based, and rolling AQI features.
 
 ## Explainability
 
@@ -208,4 +222,11 @@ uvicorn api:app --reload
 
 ## Conclusion
 
-This project successfully implements an end-to-end AQI prediction system for Karachi with automated data pipelines, Hopsworks Feature Store, Hopsworks Model Registry, explainability using SHAP and LIME, and an interactive Streamlit dashboard for real-time and forecasted AQI monitoring.
+The Pearls AQI Predictor successfully delivers an end-to-end, production-grade ML system for 72-hour AQI forecasting in Karachi. The system achieves:
+• R² = 0.894 on the 72-hour forecast target — strong predictive accuracy
+•Fully automated hourly data collection and daily retraining via GitHub Actions
+•Robust data quality handling with multi-tier API fallback strategy
+•Model explainability through SHAP (global) and LIME (local) analysis
+•Live public dashboard with real-time AQI insights and health alerts
+•Production MLOps architecture using Hopsworks Feature Store and Model Registry
+
